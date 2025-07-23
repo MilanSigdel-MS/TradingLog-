@@ -1,0 +1,2 @@
+# TradingLog-
+Trading Tool
