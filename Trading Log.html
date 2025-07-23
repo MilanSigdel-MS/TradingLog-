@@ -1,0 +1,299 @@
+<!DOCTYPE html><html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Trading Logbook</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      background: linear-gradient(to right, #e0f7fa, #ffffff);
+      font-family: 'Segoe UI', sans-serif;
+      margin: 0;
+      padding: 0;
+      color: #333;
+    }
+    header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 1rem 1.5rem;
+      background: #0288d1;
+      color: #fff;
+      font-size: 1.4rem;
+    }
+    header img {
+      width: 40px;
+    }
+    h1 {
+      margin: 0;
+      font-size: 1.6rem;
+    }
+    form, .summary, .charts, .footer, .export-section {
+      background: #ffffff;
+      padding: 1.2rem;
+      border-radius: 12px;
+      margin: 1.2rem;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+    }
+    input, button {
+      margin: 0.5rem 0;
+      padding: 0.7rem;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 1rem;
+      width: 100%;
+    }
+    button {
+      background: #0288d1;
+      color: #fff;
+      font-weight: bold;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+    button:hover {
+      background: #0277bd;
+    }
+    table {
+      width: 95%;
+      margin: 1rem auto;
+      border-collapse: collapse;
+      background: #fff;
+    }
+    th, td {
+      padding: 10px;
+      border: 1px solid #ddd;
+      text-align: center;
+    }
+    th {
+      background: #e1f5fe;
+      color: #333;
+    }
+    .summary h2 {
+      margin: 0.5rem 0;
+      text-align: center;
+      padding: 1rem;
+      font-size: 1.3rem;
+      border-radius: 8px;
+    }
+    .summary p {
+      margin: 0.3rem 0;
+      font-size: 1rem;
+      text-align: center;
+    }
+    .charts canvas {
+      background: #fafafa;
+      border-radius: 10px;
+      padding: 10px;
+    }
+    .footer {
+      text-align: center;
+      font-size: 0.95rem;
+      padding: 1rem;
+      background: #0288d1;
+      color: #fff;
+      border-radius: 0 0 10px 10px;
+    }
+    .footer small {
+      display: block;
+      font-style: italic;
+      font-size: 0.85rem;
+      margin-top: 0.5rem;
+      opacity: 0.85;
+    }
+    .export-section {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+    #deleteRecordsSection {
+      display: none;
+      background: #ffffff;
+      padding: 1rem;
+      margin: 1rem;
+      border-radius: 10px;
+      box-shadow: 0 0 8px rgba(0,0,0,0.05);
+    }
+    .delete-menu-btn {
+      background: #d32f2f;
+    }
+    .checkbox-list {
+      max-height: 200px;
+      overflow-y: auto;
+      margin-bottom: 10px;
+    }
+    label {
+      display: block;
+      margin: 5px 0;
+    }
+    @media(max-width: 768px) {
+      canvas {
+        width: 100% !important;
+        max-width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <img src="https://cdn-icons-png.flaticon.com/512/190/190411.png" alt="Notebook" />
+    <h1>📒 Trading Logbook</h1>
+  </header>  <form id="tradeForm">
+    <input type="text" id="stockName" placeholder="Stock Name" required />
+    <input type="number" id="tradedAmount" placeholder="Traded Amount (Rs)" min="1" required />
+    <input type="number" id="profitLoss" placeholder="Profit/Loss (Rs)" required />
+    <button type="submit">Add Record</button>
+  </form>  <div class="summary" id="summaryStats"></div>  <table id="tradeTable">
+    <thead>
+      <tr>
+        <th>S.N.</th>
+        <th>Stock Name</th>
+        <th>Traded Amount (Rs)</th>
+        <th>Profit/Loss (Rs)</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>  <div class="charts">
+    <canvas id="lineChart"></canvas>
+    <canvas id="pieChart"></canvas>
+  </div>  <div class="export-section">
+    <button onclick="printPage()">Export to PDF</button>
+    <button class="delete-menu-btn" onclick="toggleDeleteMenu()">Delete Record</button>
+  </div>  <div id="deleteRecordsSection">
+    <h3>Select Records to Delete:</h3>
+    <div>
+      <input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)" />
+      <label for="selectAll"><strong>Select All</strong></label>
+    </div>
+    <div class="checkbox-list" id="deleteList"></div>
+    <button onclick="deleteSelectedRecords()">Delete Selected</button>
+  </div>  <div class="footer">
+    Developed by Milan Sigdel
+    <small>✉️ milansigdel.ms@gmail.com</small>
+  </div><script>
+let trades = JSON.parse(localStorage.getItem("trades")) || [];
+const tableBody = document.querySelector("#tradeTable tbody");
+const summaryStats = document.getElementById("summaryStats");
+
+function saveToLocal() {
+  localStorage.setItem("trades", JSON.stringify(trades));
+}
+
+function render() {
+  tableBody.innerHTML = "";
+  let totalProfit = 0, win = 0, loss = 0, totalTraded = 0;
+  let labels = [], profits = [];
+
+  trades.forEach((trade, index) => {
+    totalProfit += trade.profitLoss;
+    totalTraded += trade.tradedAmount;
+    if (trade.profitLoss >= 0) win++; else loss++;
+    labels.push(`${trade.stockName} (Rs ${trade.tradedAmount})`);
+    profits.push(trade.profitLoss);
+
+    tableBody.innerHTML += `
+      <tr>
+        <td>${index + 1}</td>
+        <td>${trade.stockName}</td>
+        <td>Rs ${trade.tradedAmount}</td>
+        <td style="color: ${trade.profitLoss >= 0 ? 'green' : 'red'}">Rs ${trade.profitLoss}</td>
+      </tr>`;
+  });
+
+  const lossRate = trades.length ? ((loss / trades.length) * 100).toFixed(2) : 0;
+
+  summaryStats.innerHTML = `
+    <h2 style="background:${totalProfit >= 0 ? '#d4edda' : '#f8d7da'}; color:${totalProfit >= 0 ? '#155724' : '#721c24'};">
+      ${totalProfit >= 0 ? 'Net Profit' : 'Net Loss'}: Rs ${totalProfit}
+    </h2>
+    <p>Total Traded Amount: Rs ${totalTraded}</p>
+    <p>Total Trades: ${trades.length} | Wins: ${win} | Losses: ${loss}</p>
+    <p>Win Rate: ${((win / trades.length) * 100 || 0).toFixed(2)}% | Loss Rate: ${lossRate}%</p>`;
+
+  drawCharts(labels, profits);
+  generateDeleteChecklist();
+}
+
+function drawCharts(labels, profits) {
+  ["lineChart", "pieChart"].forEach(id => Chart.getChart(id)?.destroy());
+
+  new Chart(lineChart, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Profit/Loss (Rs)',
+        data: profits,
+        borderColor: '#0288d1',
+        backgroundColor: profits.map(p => p >= 0 ? 'rgba(76, 175, 80, 0.3)' : 'rgba(244, 67, 54, 0.3)'),
+        tension: 0.4,
+        fill: true
+      }]
+    }
+  });
+
+  new Chart(pieChart, {
+    type: 'pie',
+    data: {
+      labels: ['Win', 'Loss'],
+      datasets: [{
+        data: [profits.filter(p => p >= 0).length, profits.filter(p => p < 0).length],
+        backgroundColor: ['#43a047', '#e53935']
+      }]
+    }
+  });
+}
+
+document.getElementById("tradeForm").addEventListener("submit", e => {
+  e.preventDefault();
+  const stockName = document.getElementById("stockName").value.trim();
+  const tradedAmount = parseFloat(document.getElementById("tradedAmount").value);
+  const profitLoss = parseFloat(document.getElementById("profitLoss").value);
+
+  if (!stockName || isNaN(tradedAmount) || isNaN(profitLoss) || tradedAmount <= 0) {
+    alert("Please enter valid input. Traded Amount must be positive.");
+    return;
+  }
+
+  trades.push({ stockName, tradedAmount, profitLoss });
+  saveToLocal();
+  e.target.reset();
+  render();
+});
+
+function printPage() {
+  const fiscalYear = prompt("Enter Financial Year to include in report (e.g. 2024-2025):");
+  if (!fiscalYear) return alert("Financial Year is required.");
+  window.print();
+}
+
+function toggleDeleteMenu() {
+  const section = document.getElementById("deleteRecordsSection");
+  section.style.display = section.style.display === "none" ? "block" : "none";
+}
+
+function generateDeleteChecklist() {
+  const deleteList = document.getElementById("deleteList");
+  deleteList.innerHTML = trades.map((t, i) =>
+    `<label><input type="checkbox" class="deleteCheck" value="${i}"> ${t.stockName} (Rs ${t.tradedAmount})</label>`
+  ).join("");
+}
+
+function toggleSelectAll(checkbox) {
+  document.querySelectorAll(".deleteCheck").forEach(cb => cb.checked = checkbox.checked);
+}
+
+function deleteSelectedRecords() {
+  const selected = Array.from(document.querySelectorAll(".deleteCheck:checked"))
+    .map(cb => parseInt(cb.value));
+  if (!selected.length) return alert("Select at least one record.");
+
+  const captcha = prompt("Type DELETE to confirm deletion of selected records:");
+  if (captcha !== "DELETE") return alert("Incorrect CAPTCHA. Deletion cancelled.");
+
+  trades = trades.filter((_, index) => !selected.includes(index));
+  saveToLocal();
+  render();
+}
+
+render();
+</script></body>
+</html>
